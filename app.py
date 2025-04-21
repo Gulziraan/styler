@@ -1,93 +1,90 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 import os
+import openai
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
+# Set OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Initialize FastAPI app
 app = FastAPI()
 
-# CORS (можно ограничить конкретными origin)
+# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Можно указать конкретные домены
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Модель запроса
+# Request schema
 class StyleRequest(BaseModel):
     text: str
-    style: str  # например: "formal", "conversational"
+    style: str
     language: str = "ru"
 
-# Модель ответа
+# Response schema
 class StyleResponse(BaseModel):
-    original_text: str
-    transformed_text: str
+    originalText: str
+    transformedText: str
     style: str
 
-# Prompt, адаптируемый по стилю и языку
-def build_prompt(text: str, style: str, language: str) -> str:
-    instructions = {
-        "formal": {
-            "ru": "Перепиши текст в формальном деловом стиле.",
-            "en": "Rewrite the text in a formal business tone."
-        },
-        "conversational": {
-            "ru": "Сделай текст более разговорным и неформальным.",
-            "en": "Make the text more conversational and informal."
-        },
-        "literary": {
-            "ru": "Преобразуй текст в художественный, с образными выражениями.",
-            "en": "Transform the text into a literary, expressive style."
-        },
-        "simple": {
-            "ru": "Сделай текст проще и понятнее.",
-            "en": "Simplify the text for clarity and accessibility."
-        },
-        "emotional-positive": {
-            "ru": "Добавь позитивный эмоциональный окрас.",
-            "en": "Add a positive emotional tone."
-        },
-        "emotional-negative": {
-            "ru": "Добавь негативный эмоциональный окрас.",
-            "en": "Add a negative emotional tone."
-        },
-    }
-
-    instruction = instructions.get(style, {}).get(language)
-    if not instruction:
-        raise ValueError("Unsupported style or language.")
-
-    return f"{instruction}\n\nТекст:\n{text}"
+# Style prompt templates
+STYLE_PROMPTS = {
+    "formal": {
+        "ru": "Перепиши следующий текст в деловом, официальном стиле:\n\n{input}",
+        "en": "Rewrite the following text in a formal, business tone:\n\n{input}",
+    },
+    "conversational": {
+        "ru": "Сделай этот текст неформальным и разговорным:\n\n{input}",
+        "en": "Make this text informal and conversational:\n\n{input}",
+    },
+    "literary": {
+        "ru": "Преврати этот текст в художественный рассказ:\n\n{input}",
+        "en": "Transform this text into a literary passage:\n\n{input}",
+    },
+    "simple": {
+        "ru": "Упрости следующий текст, сохранив смысл:\n\n{input}",
+        "en": "Simplify the following text while keeping its meaning:\n\n{input}",
+    },
+    "emotional-positive": {
+        "ru": "Сделай текст эмоциональным и с позитивным настроем:\n\n{input}",
+        "en": "Make this text emotional with a positive tone:\n\n{input}",
+    },
+    "emotional-negative": {
+        "ru": "Передай в тексте сильные отрицательные эмоции:\n\n{input}",
+        "en": "Make this text emotional with a negative tone:\n\n{input}",
+    },
+}
 
 @app.post("/style", response_model=StyleResponse)
 async def style_text(request: StyleRequest):
-    try:
-        prompt = build_prompt(request.text, request.style, request.language)
+    prompt_template = STYLE_PROMPTS.get(request.style, {}).get(request.language)
+    if not prompt_template:
+        raise HTTPException(status_code=400, detail="Unsupported style or language")
 
-        response = client.chat.completions.create(
+    prompt = prompt_template.format(input=request.text)
+
+    try:
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Ты помощник по стилистике текста."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "Ты помощник, преобразующий текст в заданный стиль."},
+                {"role": "user", "content": prompt},
             ],
             temperature=0.7,
         )
-
-        transformed = response.choices[0].message.content.strip()
-
+        transformed_text = response.choices[0].message.content.strip()
         return StyleResponse(
-            original_text=request.text,
-            transformed_text=transformed,
-            style=request.style
+            originalText=request.text,
+            transformedText=transformed_text,
+            style=request.style,
         )
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {e}")
