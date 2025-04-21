@@ -1,84 +1,65 @@
-# app.py
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
-from pydantic import BaseModel
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Установи переменную в Railway
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or "YOUR_GROQ_API_KEY"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama3-8b-8192"
 
-class StyleRequest(BaseModel):
-    text: str
-    style: str
-    language: str = "ru"
+STYLE_PROMPTS = {
+    "формальный": "Сделай текст формальным, сохрани язык и смысл, не добавляй ничего лишнего.",
+    "художественный": "Переделай текст в художественном стиле, используя метафоры и выразительность.",
+    "разговорный": "Сделай текст разговорным, как будто говоришь с другом.",
+    "простой": "Упростить текст, чтобы он был понятен даже ребенку.",
+    "эмоциональный плюс": "Сделай текст позитивным и вдохновляющим, сохрани смысл.",
+    "эмоциональный минус": "Сделай текст драматичным и с оттенком печали, сохрани смысл."
+}
 
 @app.post("/style")
-async def style_text(req: StyleRequest):
-    system_message = get_prompt(req.style, req.language)
-    
-    payload = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": req.text}
-        ]
-    }
+async def style_text(request: Request):
+    data = await request.json()
+    original_text = data.get("text")
+    selected_style = data.get("style")
+
+    if not original_text or not selected_style:
+        return {"error": "Both 'text' and 'style' must be provided"}
+
+    style_instruction = STYLE_PROMPTS.get(selected_style)
+    if not style_instruction:
+        return {"error": f"Style '{selected_style}' is not supported."}
+
+    prompt = f"{style_instruction} Вот текст: {original_text}"
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
 
+    payload = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": "Ты помощник, который переписывает текст в нужном стиле, не меняя язык."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7
+    }
+
     async with httpx.AsyncClient() as client:
         response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+        result = response.json()
 
-    if response.status_code != 200:
-        return {
-            "status": "error",
-            "code": response.status_code,
-            "message": response.text
-        }
-
-    data = response.json()
-    result = data["choices"][0]["message"]["content"]
-    return {"transformedText": result}
-
-def get_prompt(style: str, language: str) -> str:
-    prompts = {
-        "formal": {
-            "ru": "Измени стиль текста на официальный, но **не изменяй язык текста**.",
-            "en": "Change the style to formal, but **do not change the language** of the text."
-        },
-        "conversational": {
-            "ru": "Сделай стиль текста разговорным, но **не меняй язык текста**.",
-            "en": "Make the style conversational, but **do not change the language** of the text."
-        },
-        "literary": {
-            "ru": "Сделай текст художественным, с красивыми описаниями, но **оставь язык текста без изменений**.",
-            "en": "Make the text more literary with vivid descriptions, but **do not change its language**."
-        },
-        "simple": {
-            "ru": "Упрости текст, сделай его понятным, но **не переводь его на другой язык**.",
-            "en": "Simplify the text, make it easy to understand, but **do not translate it**."
-        },
-        "emotional-positive": {
-            "ru": "Сделай текст более эмоциональным и позитивным, **не меняя язык текста**.",
-            "en": "Make the text more emotional and positive, **without changing its language**."
-        },
-        "emotional-negative": {
-            "ru": "Сделай текст более эмоциональным с негативной окраской, **сохрани язык текста**.",
-            "en": "Make the text more emotional and negative in tone, **keeping the language unchanged**."
-        }
-    }
-    return prompts.get(style, {}).get(language, "Измени стиль текста, не меняя язык.")
+    try:
+        content = result['choices'][0]['message']['content']
+        return {"styled_text": content}
+    except Exception:
+        return {"error": "Failed to get response", "details": result}
