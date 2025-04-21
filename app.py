@@ -57,28 +57,28 @@ async def style_text(req: StyleRequest):
 def get_prompt(style: str, language: str) -> str:
     prompts = {
         "formal": {
-            "ru": "Преобразуй текст в деловой официальный стиль.",
-            "en": "Transform the text into a formal business tone."
+            "ru": "Измени стиль текста на официальный, но **не изменяй язык текста**.",
+            "en": "Change the style to formal, but **do not change the language** of the text."
         },
         "conversational": {
-            "ru": "Преобразуй текст в простой разговорный стиль.",
-            "en": "Make the text sound casual and conversational."
+            "ru": "Сделай стиль текста разговорным, но **не меняй язык текста**.",
+            "en": "Make the style conversational, but **do not change the language** of the text."
         },
         "literary": {
-            "ru": "Сделай текст более художественным, с красивыми описаниями.",
-            "en": "Enhance the text with literary and artistic language."
+            "ru": "Сделай текст художественным, с красивыми описаниями, но **оставь язык текста без изменений**.",
+            "en": "Make the text more literary with vivid descriptions, but **do not change its language**."
         },
         "simple": {
-            "ru": "Сделай текст простым и понятным.",
-            "en": "Make the text very simple and easy to understand."
+            "ru": "Упрости текст, сделай его понятным, но **не переводь его на другой язык**.",
+            "en": "Simplify the text, make it easy to understand, but **do not translate it**."
         },
         "emotional-positive": {
-            "ru": "Сделай текст эмоциональным с позитивной окраской.",
-            "en": "Make the text emotional and positive."
+            "ru": "Сделай текст более эмоциональным и позитивным, **не меняя язык текста**.",
+            "en": "Make the text more emotional and positive, **without changing its language**."
         },
         "emotional-negative": {
-            "ru": "Сделай текст эмоциональным с негативной окраской.",
-            "en": "Make the text emotional and negative."
+            "ru": "Сделай текст более эмоциональным с негативной окраской, **сохрани язык текста**.",
+            "en": "Make the text more emotional and negative in tone, **keeping the language unchanged**."
         }
     }
-    return prompts.get(style, {}).get(language, "Перепиши текст.")
+    return prompts.get(style, {}).get(language, "Измени стиль текста, не меняя язык.")
